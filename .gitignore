@@ -198,3 +198,5 @@ plot_actions_comparison.py
 parse_data_envs
 .cursor
 .deps
+# Local pretrained weights (several GB).
+ckpts/
