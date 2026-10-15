@@ -99,6 +99,14 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   (msgpack over WebSocket, contract in `deploy/protocol.py`). Camera set is read from the checkpoint's dataset
   config (A/B: head + both wrists, C/D: head only); tactile on/off from the checkpoint. Server does all
   preprocessing via `deploy/wuji_policy_io.py` and returns ABSOLUTE right arm (deg) / hand (rad) targets, 32 x 50 ms.
+- Files the server reads from a step dir: `model.safetensors` (7.6 GB, full weights; the pretrained base ckpt is not
+  needed), `model_config.json`, `train_config.json` (norm settings), `tactile_input_config_file.json`,
+  `hpt_tokenizer/`, `normalization/` (~7.7 GB total). `optimizer.pt` (15 GB) and `metadata.pt` are training-only.
+  Also needs `$OPENPI_DATA_HOME/big_vision/paligemma_tokenizer.model` (4 MB, else fetched from gs://).
+  On another machine pass `--cameras` (A/B/E: `head right_wrist left_wrist`, C/D/F: `head`): auto-detection reads
+  `train_config.dataset_config_path` and globs the training zarrs, which only exist here.
+- huggingface.co is DNS-poisoned here (fake IPs, TCP 443 times out); hf-mirror is download-only, so model uploads to
+  HF must go from another machine or through a proxy. modelscope.cn is reachable.
 - Robot side (thin, no torch): `deploy/client/ros_node.py --server ws://<gpu>:8848 --task task2|task3 [--execute]`.
   Dry run by default. Subscribes joint_states / cameras / tactile PointCloud2, publishes `/right_{arm,hand}/
   joint_commands` (JointState, arm deg / hand rad, names, BEST_EFFORT depth 1, CLOCK_REALTIME stamp, 120 Hz, hand
