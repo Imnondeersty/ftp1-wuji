@@ -17,6 +17,10 @@ import openpi.training.data_loader as _data_loader
 
 
 def main(config: _config.TrainConfig):
+    # Rebuild derived fields (incl. the data factory) from CLI overrides such as --dataset_config_path,
+    # same as scripts/zarr_train_ftp1_pytorch.py.
+    if isinstance(config, _config.FTP1TrainConfig):
+        config.finalize_config()
     data_config = config.data.create(config.assets_dirs, config.model)
     action_horizon = config.model.action_horizon
     batch_size = config.norm_batch_size
