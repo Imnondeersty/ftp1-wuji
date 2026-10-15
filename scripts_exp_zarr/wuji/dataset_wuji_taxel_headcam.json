@@ -1,0 +1,12 @@
+{
+  "datasets": [
+    {
+      "name": "WujiTianji",
+      "path": "/wuji-vepfs/wuji-il/YuanZhen/data/wuji-tactile-zarr-taxel-headcam/WujiTianji",
+      "use_trajectory_ratio": 1.0,
+      "enabled": true
+    }
+  ],
+  "default_use_trajectory_ratio": 1.0,
+  "description": "Same data as dataset_wuji_headcam.json but per-taxel tactile instead of per-fingertip aggregate force, from data/_tools/convert_wuji_taxel.py --drop-wrist-cams."
+}

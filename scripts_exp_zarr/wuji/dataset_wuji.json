@@ -1,0 +1,12 @@
+{
+  "datasets": [
+    {
+      "name": "WujiTianji",
+      "path": "/wuji-vepfs/wuji-il/YuanZhen/data/wuji-tactile-zarr/WujiTianji",
+      "use_trajectory_ratio": 1.0,
+      "enabled": true
+    }
+  ],
+  "default_use_trajectory_ratio": 1.0,
+  "description": "Wuji hand 2 + Tianji arm teleop data (tactile_task2 + tactile_task3, right arm/hand), converted by data/_tools/convert_wuji_to_zarr.py."
+}

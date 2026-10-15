@@ -1,0 +1,12 @@
+{
+  "datasets": [
+    {
+      "name": "WujiTianji",
+      "path": "/wuji-vepfs/wuji-il/YuanZhen/data/wuji-tactile-zarr-taxel/WujiTianji",
+      "use_trajectory_ratio": 1.0,
+      "enabled": true
+    }
+  ],
+  "default_use_trajectory_ratio": 1.0,
+  "description": "Same data as dataset_wuji.json but per-taxel tactile (thumb 40x3, index..pinky 34x3) instead of per-fingertip aggregate force, from data/_tools/convert_wuji_taxel.py."
+}

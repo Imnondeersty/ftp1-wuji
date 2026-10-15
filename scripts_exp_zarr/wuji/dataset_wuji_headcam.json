@@ -1,0 +1,12 @@
+{
+  "datasets": [
+    {
+      "name": "WujiTianji",
+      "path": "/wuji-vepfs/wuji-il/YuanZhen/data/wuji-tactile-zarr-headcam/WujiTianji",
+      "use_trajectory_ratio": 1.0,
+      "enabled": true
+    }
+  ],
+  "default_use_trajectory_ratio": 1.0,
+  "description": "Same data as dataset_wuji.json but head camera only (wrist camera arrays removed), for the tactile-vs-vision ablation."
+}
