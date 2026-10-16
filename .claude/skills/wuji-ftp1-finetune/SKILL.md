@@ -30,8 +30,14 @@ description: Fine-tune FTP-1 on Wuji hand 2 + Tianji arm teleop data (ROS2 MCAP 
 - Hand: 20 joints (rad). Per finger joint1..4 = thumb: cmc_flex, cmc_abd, mcp, ip / others: mcp_flex, mcp_abd, pip, dip.
   `hand_joints_idx = [1,26,2,3, 7,6,8,9, 12,11,13,14, 17,16,18,19, 22,21,23,24]`.
 - Tactile (plan A): per-fingertip aggregate force `agg_f{x,y,z}` (N) -> `{side}_tactile_data_fingertips (T,5,3)`,
-  type `state`, sensor `WujiHand2`, areas `[0..4]` (loader adds +24 for left). Per-taxel `fx,fy,fz` are normalized
-  distributions (not N) and are not used yet. README spike rule applied at 100 Hz before resampling.
+  type `state`, sensor `WujiHand2`, areas `[0..4]` (loader adds +24 for left). Per-taxel `fx,fy,fz` (fixed-scale,
+  dimensionless) are the separate taxel variant below. README spike rule applied at 100 Hz before resampling.
+- Cleaning result (`conversion_report.json`): all 102 bags in `ros2_bags/` kept (task2 35 / 11377 frames, task3 67 /
+  17835 frames, 24 min at 20 Hz); the 85 `ros2_bags_fail/` bags (7 operator-failed + 78 tactile zero drift) are not
+  used. Spike rule dropped 444 tactile samples at 100 Hz (~0.06%; index finger 353, in 26 bags). Worst stream gaps
+  0.033 s for cameras; 2 task3 bags (`rosbag_20261008_165457`, `_170814`) have 0.18 s hand / 0.13 s tactile gaps
+  (interpolated over). The 78 drift bags have good vision/joints and could feed a no-tactile run or a
+  drift-corrected tactile variant (not done).
 - Only the right arm/hand is exported by default: task2 left side is static and its left tactile firmware (v2.5.1) is
   broken; task3 left arm moves ~10-15 deg but the left hand never makes contact. Use `--keep-left` to export it.
 
