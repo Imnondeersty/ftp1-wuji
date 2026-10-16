@@ -94,6 +94,14 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   targets), and the wrapper's normalization/denormalization matches the dataset to 1e-7. With relative pose reps and no
   history the state's wrist pose is always identity, so deployment needs no FK; actions are applied in joint space.
   `wrapper.infer()` latency on A800, bf16, 10 flow steps, no compile: ~295 ms (A and B) for a 1.6 s chunk.
+- How the two offline metrics differ (both open-loop): the trainer's validation (every `val_interval`, all 6 runs)
+  samples the val loader in fixed order (8 ranks x 10 batches x 16 = 1280 of the 1322 val frames, same frames for
+  every run), one flow sample with unseeded noise, de-normalized RMSE per action group; `rmse_total` mixes m, 6-D
+  rotation entries and rad, so use it only to rank runs. `offline_eval.py` goes through the deployment path, every
+  4th val frame (330), seeded noise shared by both checkpoints, errors in mm/deg over real future frames only, plus a
+  hold-current-pose baseline. offline_eval was run for A/B and C/D only, not E/F.
+- `--ema_decay` is ignored: the PyTorch trainer logs "EMA is not supported for PyTorch training", so every
+  checkpoint holds raw weights.
 - Note: near episode ends the dataset pads the chunk by repeating the last action AND its mask, so count valid future
   frames from the episode end, not from `action_mask`.
 - CPU pre-flight for config changes without touching GPUs: `scripts_exp_zarr/wuji/check_notactile_cpu.py`
