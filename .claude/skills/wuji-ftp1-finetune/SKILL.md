@@ -119,8 +119,16 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   Also needs `$OPENPI_DATA_HOME/big_vision/paligemma_tokenizer.model` (4 MB, else fetched from gs://).
   On another machine pass `--cameras` (A/B/E: `head right_wrist left_wrist`, C/D/F: `head`): auto-detection reads
   `train_config.dataset_config_path` and globs the training zarrs, which only exist here.
-- huggingface.co is DNS-poisoned here (fake IPs, TCP 443 times out); hf-mirror is download-only, so model uploads to
-  HF must go from another machine or through a proxy. modelscope.cn is reachable.
+- huggingface.co is blocked here (machine is in Shanghai, China Telecom): DNS returns fake Facebook-range IPs and even
+  real CloudFront IPs reset the TLS connection (SNI filtering). hf-mirror is download-only, so HF uploads need another
+  machine or a proxy.
+- Models are on ModelScope **international** site, private repo `Imnondeersty/ftp1-wuji` (uploaded 2026-10-17, ~42 MB/s
+  from here): subdirs `A_agg_3cam/ ... F_taxel_headcam/` (step 9999 without optimizer.pt / metadata.pt) +
+  `big_vision/paligemma_tokenizer.model` + README. SDK in its own venv `/root/.venvs/modelscope` (modelscope 1.37.1);
+  script `/tmp/ms_ftp1_wuji/upload.py`. Every call needs `MODELSCOPE_DOMAIN=www.modelscope.ai` (default is
+  modelscope.cn, separate accounts/tokens); login `modelscope login --token ... --endpoint modelscope.ai`. Token page is
+  `https://www.modelscope.ai/my/settings/token` (`/my/myaccesstoken` 404s there). The `git lfs is not installed` errors
+  at repo creation are harmless (file uploads use HTTP).
 - Robot side (thin, no torch): `deploy/client/ros_node.py --server ws://<gpu>:8848 --task task2|task3 [--execute]`.
   Dry run by default. Subscribes joint_states / cameras / tactile PointCloud2, publishes `/right_{arm,hand}/
   joint_commands` (JointState, arm deg / hand rad, names, BEST_EFFORT depth 1, CLOCK_REALTIME stamp, 120 Hz, hand
