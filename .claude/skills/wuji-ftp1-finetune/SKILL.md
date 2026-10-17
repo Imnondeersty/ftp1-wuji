@@ -189,6 +189,17 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   and `MatrixCNNEncoder` crashes on anisotropic shapes like (2,64), because it pools both dims whenever either is >4.
   `image` (224x224x3 ViT) is overkill.
 - Apply the spike mask to the taxels as well (spikes are blocks of byte-identical taxels), then interpolate like agg.
+- Format verification 2026-10-17 (both formats, all 4 zarr variants): OXT-QC `precheck_metadata.py <variant>/WujiTianji
+  -o /tmp/... --no-metadata` passes with 0 errors / 0 warnings (it only checks the four-piece set, channel count, type,
+  timestamps). An independent read-only check (re-parse MCAP, rebuild the grid with np.interp, no converter code)
+  matched both zarrs to <1e-7 on val bag `rosbag_20261008_165210` (no spikes); on `rosbag_20261008_171024` (35 index
+  spikes) only 7 index frames differ, the same frames in both formats, all with lower |agg| (spike removed). Area ids
+  match `definition_tactile_torque_function_area.png` (0 thumb tip, 1-4 index..pinky tips); finger order confirmed by
+  corr(sum taxel fz, agg fz) being diagonal-dominant; headcam variants hold byte-identical tactile arrays.
+- For an OXT submission: one physical sensor currently has two names (`WujiHand2`, `WujiHand2Taxel`); search
+  open-x-tactile.github.io for an existing Wuji name first. Also needed: `sensor_<name>.png`, `hand_joints_idx.png`,
+  `tactile_func_area_idx.png`, metadata.json. Tactile is point-sampled 100 -> 20 Hz (no window averaging), so contact
+  transients shorter than 50 ms can be missed; deployment does the same (latest filtered sample).
 
 ## Known issues
 - `DATASET_CONFIG` must be the same string (use the absolute path) for norm stats and training: the trainer compares
