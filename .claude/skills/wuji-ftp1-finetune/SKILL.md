@@ -210,6 +210,28 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   transients shorter than 50 ms can be missed; deployment does the same (latest filtered sample).
 
 ## Known issues
+- **Likely grasp failure cause (2026-10-18): hand actions are measured positions, not teleop commands.** The bags
+  record `/right_{arm,hand}/joint_commands` (~100 Hz) next to `joint_states`, but the converter only exports states and
+  `dataset_zarr.py` builds hand actions from the same `{side}_hand_joints` key as the state input. Over all 102 bags
+  (`/tmp/claude_checks/cmd_vs_state.py`), command - state on frames where that finger has |agg| > 1 N: thumb mcp
+  (finger1_joint3) +13.8 deg (p90 +21), thumb cmc_flex/abd +4, index pip +8.3, index abd -5.8, other flexions
+  +2..+3 deg; on free frames ~0 (+-1). So the squeeze that makes the grip lives only in the commands; a policy
+  trained on states (all A-F) closes the fingers to the object surface without grip force. On 26% of contact frames
+  the contacting fingers' measured joints move < 2 deg over the whole next 1.6 s, i.e. the hand action label is ~0
+  while the operator keeps squeezing (e.g. thumb mcp state flat at 15.9 deg, command 15 -> 36 deg). Episode tails
+  are not flat (every episode ends released; last 1.6 s hand moves median 12 deg); end-of-episode padding repeats
+  the last frame with loss on for ~5% of action steps, which only teaches stopping at task end. Arm cmd - state is ~1 deg
+  everywhere (tracking lag, not contact-specific). Fix: export the commands (e.g. `right_hand_joints_cmd`) and use them
+  as the hand action key (state input stays measured; mix rep deltas then become command - measured), recompute norm
+  stats, retrain. Not done yet.
+  Arm (`/tmp/claude_checks/arm_cmd_offset.py`): cmd - state is mostly tracking lag (corr with joint velocity
+  0.82-0.94; wrist FK gap median 17.7 mm while moving) plus a small static sag (joints 1/2/4 -0.5..-0.85 deg, wrist
+  median 5.5 mm / p90 11.6 mm when still). State-based arm targets therefore make the robot slower and stop a few mm
+  short, not cm off. If arm actions also switch to commands, `*_wrist_pose` actions need FK of the commands too.
+  User report 2026-10-18 (robot, model not specified): hand "never touches, or touches and keeps probing back and
+  forth". Image preprocessing in deploy matches the converter; the SafetyFilter hand deviation stop is 0.6 rad, above
+  the squeeze offsets. Robot runs save `deploy_logs/run_<tag>.{npz,json}` (t, cmd, target, measured) - ask for them.
+  After retraining on commands, recompute the hand envelope in `executor.py` (data envelope + 0.15 rad was from states).
 - `DATASET_CONFIG` must be the same string (use the absolute path) for norm stats and training: the trainer compares
   `norm_params_snapshot.json` literally, so a relative path at norm time vs absolute at train time fails at startup
   with "Norm params mismatch ... dataset_config_path". Fix: rerun norm stats, or set the snapshot's path to the
