@@ -209,6 +209,45 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   `tactile_func_area_idx.png`, metadata.json. Tactile is point-sampled 100 -> 20 Hz (no window averaging), so contact
   transients shorter than 50 ms can be missed; deployment does the same (latest filtered sample).
 
+## Teleop-command actions (v2cmd, 2026-10-18)
+- Why: see Known issues (measured joints freeze on contact, the grip lives in the commands). Decision: arm, hand and
+  wrist-pose actions from the commands, state input (and the base of relative actions) stays measured, so
+  action = command(t+k) - measured(t); `deploy/wuji_policy_io.actions_to_targets` (measured + delta) is unchanged.
+- Data: `data_tools/convert_wuji_cmd.py --src <variant> --out <variant>-cmd` copies a variant byte for byte and adds
+  `right_arm_joints_cmd` (T,7 rad), `right_hand_joints_cmd` (T,20 rad), `right_wrist_pose_cmd` (FK of the arm
+  commands); it rebuilds the v1 grid and asserts the re-derived arm/hand states equal the source bit-exact (~1 min per
+  variant). Outputs `data/wuji-tactile-zarr-cmd/` (7.4 GB, for A2) and `data/wuji-tactile-zarr-taxel-headcam-cmd/`
+  (2.3 GB, for F2); `diff -rq` vs sources: only the 3 new arrays. The OXT-format zarrs, their converters and OXT-QC
+  are untouched; `*_cmd` is a training-only extension, the OXT submission uses the original variants.
+- Loader: `dataset_zarr._action_source_key` takes `<key>_cmd` for the three action reads when the zarr has it (logs
+  "action targets taken from [...]"). No config flag, so norm stats / training / eval follow the data. Old-data
+  samples are bit-identical before/after the change (24 val samples, A and F datasets; the tactile dict key order is
+  not stable across runs, compare as sets). New-data check: targets rebuilt from the sample actions equal the
+  commands to 3e-8 rad, state/tactile/images identical to v1.
+- Configs `dataset_wuji_cmd.json`, `dataset_wuji_taxel_headcam_cmd.json`; repo ids `wuji_tianji_v2cmd`,
+  `wuji_tianji_v2cmd_taxel_headcam` (A's split copied in first; val episodes 8/44/65/76/101). Queue
+  `scripts_exp_zarr/wuji/queue_cmd_runs.sh` (log `ftp1_cache/queue_cmd.log`): F2 `wuji_tianji_ft_v2cmd_taxel_headcam`
+  started 2026-10-18 14:23 (~1.2 it/s), then A2 `wuji_tianji_ft_v2cmd` if F2's 9999 exists. Val rmse of v2cmd runs is
+  against the commands: not comparable with A-F.
+- `offline_eval.py`: recorded chunk and io_check targets follow ckpt-a's dataset (`recorded_actions_from` in the
+  summary); new `grip_squeeze_deg_contact` = mean closing beyond the current measured angle over the flexion joints
+  (joint1/3/4) of the fingers in contact, steps 1..n-1. Recorded, val contact frames (stride 4, n=158): v1 median
+  -0.08 deg, cmd median +4.7 deg (mean +2.5, p90 +7.2). Expect old A/F ~0, v2cmd near the recorded value.
+- F2 finished 2026-10-18 16:54 (2.5 h, exit 0, val rmse_total 0.0353 vs commands, plateau from 5k). A2 ran
+  16:55-21:41 (exit 0, val rmse_total 0.0321, hand 0.0335; plateau from 7k). Both uploaded and sha256-verified on
+  ModelScope (F2 12 files, A2 11 files, 7.7 GB each). A2 grip squeeze not measured yet. Grip squeeze, 40 val contact frames, CPU (`/tmp/claude_checks/grip_squeeze_check.py`, ~6 s/frame;
+  mean / median / p90 deg): recorded commands +2.4 / +4.6 / +7.2, recorded measured -1.2 / -0.1 / +1.8,
+  old F -1.5 / -0.2 / +1.6, **F2 +1.8 / +3.3 / +7.4**. While holding (early contact frames of every val episode) F2
+  closes +4..+9 deg past the measured pose where F predicts ~0; release-phase frames are negative for both. F2
+  reproduces ~70% of the recorded median squeeze.
+- `offline_eval.fingertip_force` now follows the conversion reports' `src` chain (taxel-headcam-cmd -> taxel-headcam
+  -> v1); the old single hop failed on the cmd variant with KeyError right_tactile_data_fingertips.
+- ModelScope: F2 -> `Imnondeersty/ftp1-wuji/F2_taxel_headcam_cmd/`, A2 -> `A2_agg_3cam_cmd/` (uploaded by
+  `/tmp/ms_ftp1_wuji/upload_A2_when_done.sh` after A2's 9999 exists), README lists v2cmd first. Upload speed to the
+  international site varied 0.9-42 MB/s.
+- `deploy/client/executor.py` envelope = union of measured and command ranges (thumb mcp max 0.53 -> 0.724 rad,
+  index pip 1.029 -> 1.17); speed caps = max of both. `client_test.py` now reads `ARM_DATA_VMAX_DEG`.
+
 ## Known issues
 - **Likely grasp failure cause (2026-10-18): hand actions are measured positions, not teleop commands.** The bags
   record `/right_{arm,hand}/joint_commands` (~100 Hz) next to `joint_states`, but the converter only exports states and
@@ -223,7 +262,7 @@ Checkpoint = ~21 GB (model + optimizer); no automatic cleanup of old checkpoints
   the last frame with loss on for ~5% of action steps, which only teaches stopping at task end. Arm cmd - state is ~1 deg
   everywhere (tracking lag, not contact-specific). Fix: export the commands (e.g. `right_hand_joints_cmd`) and use them
   as the hand action key (state input stays measured; mix rep deltas then become command - measured), recompute norm
-  stats, retrain. Not done yet.
+  stats, retrain. Implemented 2026-10-18, see "Teleop-command actions (v2cmd)".
   Arm (`/tmp/claude_checks/arm_cmd_offset.py`): cmd - state is mostly tracking lag (corr with joint velocity
   0.82-0.94; wrist FK gap median 17.7 mm while moving) plus a small static sag (joints 1/2/4 -0.5..-0.85 deg, wrist
   median 5.5 mm / p90 11.6 mm when still). State-based arm targets therefore make the robot slower and stop a few mm
