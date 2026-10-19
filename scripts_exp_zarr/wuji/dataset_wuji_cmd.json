@@ -1,0 +1,12 @@
+{
+  "datasets": [
+    {
+      "name": "WujiTianji",
+      "path": "/wuji-vepfs/wuji-il/YuanZhen/data/wuji-tactile-zarr-cmd/WujiTianji",
+      "use_trajectory_ratio": 1.0,
+      "enabled": true
+    }
+  ],
+  "default_use_trajectory_ratio": 1.0,
+  "description": "Same data as dataset_wuji.json plus the teleop joint commands (right_{arm,hand}_joints_cmd, right_wrist_pose_cmd) used as action targets, from data/_tools/convert_wuji_cmd.py."
+}
