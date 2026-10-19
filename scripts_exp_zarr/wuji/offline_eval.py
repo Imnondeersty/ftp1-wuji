@@ -8,6 +8,11 @@ Each checkpoint gets the tactile format it was trained with (fingertip forces or
 it was trained on another data variant (cameras / tactile format), its own copy of the same validation frames. So B
 can be a no-tactile baseline or a checkpoint with the other tactile format (e.g. taxel vs force).
 
+The recorded chunk comes from A's dataset: the teleop commands if it has `*_cmd` arrays (see convert_wuji_cmd.py),
+else the measured joints. On contact frames the summary also reports the grip squeeze: how far the chunk closes the
+flexion joints of the fingers in contact beyond their current measured angle (recorded commands: thumb mcp ~14 deg;
+a policy trained on measured joints predicts ~0).
+
     source scripts_exp_zarr/wuji/wuji_env.sh
     "$PYTHON" scripts_exp_zarr/wuji/offline_eval.py --ckpt-a <tactile ckpt> --ckpt-b <other ckpt> --out <dir>
 """
@@ -37,6 +42,7 @@ import wuji_policy_io as wio  # noqa: E402
 
 HAND_COLS = wio.HAND_OFFSET + wio.HAND_JOINTS_IDX
 PLOT_HAND = {"thumb cmc_flex": 0, "thumb mcp": 2, "index mcp_flex": 4, "index pip": 6}
+FLEX_JOINTS = (0, 2, 3)  # per finger joint1..4: thumb cmc_flex, cmc_abd, mcp, ip / others mcp_flex, mcp_abd, pip, dip
 TACTILE_LABEL = {"agg": "tactile", "taxel": "taxel tactile", None: "no tactile"}
 
 
@@ -72,13 +78,14 @@ def raw_tactile(fmt, data, frame):
 
 
 def fingertip_force(vds, zarr_idx, start, end):
-    """(T, 5) fingertip |aggregate force| (N) of an episode; taxel zarrs read it from the v1 zarr they came from, so
-    contact frames are the same for every variant."""
+    """(T, 5) fingertip |aggregate force| (N) of an episode; taxel zarrs read it from the v1 zarr they came from
+    (following the conversion reports' `src` chain, e.g. taxel-headcam-cmd -> taxel-headcam -> v1), so contact frames
+    are the same for every variant."""
     data = vds.datas[zarr_idx]
-    if "right_tactile_data_fingertips" not in data:
-        root = pathlib.Path(vds.dataset_path)
-        src = pathlib.Path(json.loads((root.parent / "conversion_report.json").read_text())["src"])
-        data = zarr.open_group(str(src / root.name / vds.zarr_file_list[zarr_idx] / "data"), mode="r")
+    root = pathlib.Path(vds.dataset_path)
+    while "right_tactile_data_fingertips" not in data:
+        root = pathlib.Path(json.loads((root.parent / "conversion_report.json").read_text())["src"]) / root.name
+        data = zarr.open_group(str(root / vds.zarr_file_list[zarr_idx] / "data"), mode="r")
     return np.linalg.norm(np.asarray(data["right_tactile_data_fingertips"][start:end]), axis=-1)
 
 
@@ -117,6 +124,14 @@ def chunk_errors(pred, gt, n):
     return out
 
 
+def grip_squeeze_deg(actions, n, fingers):
+    """Mean closing beyond the current measured hand pose (deg) over the flexion joints of `fingers`, steps 1..n-1.
+
+    With action_joint_rep='mix' the hand actions are exactly target - current joints."""
+    cols = [4 * k + j for k in fingers for j in FLEX_JOINTS]
+    return float(np.degrees(actions[1:n][:, HAND_COLS][:, cols]).mean())
+
+
 def joint_diff_deg(a, b, n):
     s = slice(1, n)
     return {"arm_deg": float(np.degrees(np.abs(a[s, wio.ARM_SLICE] - b[s, wio.ARM_SLICE])).mean()),
@@ -142,6 +157,9 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = True
 
     vds = build_val_dataset(args.ckpt_a)
+    keys = set(vds.datas[0].keys())
+    action_source = {part: f"right_{part}_joints_cmd" if f"right_{part}_joints_cmd" in keys else f"right_{part}_joints"
+                     for part in ("arm", "hand")}
     episodes = collections.defaultdict(dict)
     for p in range(len(vds)):
         g = vds.indices[p]
@@ -170,6 +188,9 @@ def main():
         task = "task2" if "task2" in vds.zarr_file_list[zarr_idx] else "task3"
         arm = np.asarray(data["right_arm_joints"][start:end], dtype=np.float64)
         hand = np.asarray(data["right_hand_joints"][start:end], dtype=np.float64)
+        # what the recorded actions are made of: the teleop commands if exported, else the measured joints
+        arm_ref = np.asarray(data[action_source["arm"]][start:end], dtype=np.float64)
+        hand_ref = np.asarray(data[action_source["hand"]][start:end], dtype=np.float64)
         force = fingertip_force(vds, zarr_idx, start, end)  # (T, 5)
         plot_chunks = []
         for f in sorted(frame_to_pos)[::args.stride]:
@@ -195,9 +216,9 @@ def main():
             if fmt_b is not None:
                 io_check["tactile_b_max_abs_err"] = max(io_check["tactile_b_max_abs_err"], tactile_io_err(tac_b, sb))
             io_check["target_arm_max_abs_err_deg"] = max(io_check["target_arm_max_abs_err_deg"], float(
-                np.degrees(np.abs(arm_t[:n] - arm[t:t + n]).max())))
+                np.degrees(np.abs(arm_t[:n] - arm_ref[t:t + n]).max())))
             io_check["target_hand_max_abs_err_deg"] = max(io_check["target_hand_max_abs_err_deg"], float(
-                np.degrees(np.abs(hand_t[:n] - hand[t:t + n]).max())))
+                np.degrees(np.abs(hand_t[:n] - hand_ref[t:t + n]).max())))
 
             gen = torch.Generator().manual_seed(f * 1000 + ep_idx)
             noise, noise2 = (torch.randn((1, 32, wio.STATE_DIM), generator=gen) for _ in range(2))
@@ -216,6 +237,10 @@ def main():
                 row |= {f"{name}/{k}": v for k, v in chunk_errors(pred, gt, n).items()}
             row |= {f"A_vs_A0/{k}": v for k, v in joint_diff_deg(pa, pa0, n).items()}
             row |= {f"A_vs_A2/{k}": v for k, v in joint_diff_deg(pa, pa2, n).items()}
+            if contact:
+                fingers = np.flatnonzero(force[t] > 1.0)
+                row["grip_squeeze_deg"] = {name: grip_squeeze_deg(pred, n, fingers)
+                                           for name, pred in (("recorded", gt), ("A", pa), ("B", pb))}
             if fmt_b is not None:
                 row |= {f"B_vs_B0/{k}": v for k, v in joint_diff_deg(pb, pb0, n).items()}
                 row |= {f"B_vs_B2/{k}": v for k, v in joint_diff_deg(pb, pb2, n).items()}
@@ -244,8 +269,11 @@ def main():
         latency[name] = {"median_ms": float(np.median(ts)), "p95_ms": float(np.percentile(ts, 95))}
 
     metric_rows = [{k: v for k, v in r.items() if "/" in k} for r in rows]
-    summary = {"n_samples": len(rows), "tactile_format": {"A": fmt_a, "B": fmt_b}, "io_check": dict(io_check),
-               "latency": latency, "all": mean_rows(metric_rows)}
+    squeeze_rows = [r["grip_squeeze_deg"] for r in rows if "grip_squeeze_deg" in r]
+    summary = {"n_samples": len(rows), "tactile_format": {"A": fmt_a, "B": fmt_b},
+               "recorded_actions_from": action_source, "io_check": dict(io_check), "latency": latency,
+               "grip_squeeze_deg_contact": mean_rows(squeeze_rows) | {"n": len(squeeze_rows)} if squeeze_rows else {},
+               "all": mean_rows(metric_rows)}
     for task in ("task2", "task3"):
         sel = [m for m, r in zip(metric_rows, rows) if r["task"] == task]
         if sel:
