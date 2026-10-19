@@ -17,22 +17,24 @@ import collections
 
 import numpy as np
 
-# Envelope of the v1 training data (right arm deg, right hand rad), see the deploy section of the skill doc.
-ARM_DATA_MIN_DEG = np.array([-132.3, -86.5, 46.9, -143.4, -156.1, -57.5, -4.8])
-ARM_DATA_MAX_DEG = np.array([-48.5, -43.5, 119.7, -70.0, -82.0, 36.4, 41.1])
-HAND_DATA_MIN_RAD = np.array([-0.051, -0.689, -0.004, -0.049, -0.2, -0.192, -0.01, 0.006, -0.115, -0.266, -0.01,
-                              0.048, -0.062, -0.325, -0.012, 0.009, -0.116, -0.304, -0.009, 0.029])
-HAND_DATA_MAX_RAD = np.array([0.884, 0.432, 0.53, 0.263, 0.312, 0.433, 1.029, 0.871, 0.79, 0.322, 0.543, 0.986,
-                              0.807, 0.195, 0.741, 0.815, 1.061, 0.338, 0.505, 0.482])
+# Envelope of the training data (right arm deg, right hand rad): union of the measured joints (v1 action targets) and
+# the teleop commands (*_cmd action targets), see the deploy section of the skill doc. The commands go past the
+# measured joints on contact (that is the grip), e.g. thumb mcp up to 0.724 rad vs 0.53 measured.
+ARM_DATA_MIN_DEG = np.array([-133.2, -87.9, 46.4, -145.0, -156.8, -59.3, -5.2])
+ARM_DATA_MAX_DEG = np.array([-48.3, -42.9, 119.7, -70.0, -82.0, 37.7, 41.5])
+HAND_DATA_MIN_RAD = np.array([-0.071, -0.689, -0.004, -0.049, -0.2, -0.321, -0.01, 0.0, -0.126, -0.298, -0.01,
+                              0.041, -0.079, -0.354, -0.012, 0.001, -0.126, -0.364, -0.009, 0.022])
+HAND_DATA_MAX_RAD = np.array([1.004, 0.456, 0.724, 0.277, 0.362, 0.453, 1.17, 0.897, 0.838, 0.342, 0.581, 0.995,
+                              0.819, 0.195, 0.741, 0.843, 1.075, 0.364, 0.52, 0.495])
 # Arm hard limits (tianji_full/arm_right.urdf; all recorded arm data lies inside them). The hand part of that URDF
 # does NOT match the real Wuji hand 2 (e.g. thumb joint2 lower limit -0.139 rad, recorded down to -0.69 rad), so hand
 # commands are bounded by the data envelope only; the hand driver additionally clamps to the device soft limits.
 ARM_URDF_MIN_DEG = np.array([-178.0, -120.0, -178.0, -145.0, -178.0, -60.0, -90.0])
 ARM_URDF_MAX_DEG = np.array([178.0, 120.0, 178.0, 60.0, 178.0, 60.0, 90.0])
-# Max joint speed seen in the training data at 20 Hz (arm deg/s, hand rad/s)
-ARM_DATA_VMAX_DEG = np.array([81.8, 41.1, 74.1, 65.7, 139.8, 103.5, 54.0])
-HAND_DATA_VMAX_RAD = np.array([1.53, 2.18, 1.44, 1.72, 1.01, 1.29, 3.19, 2.59, 1.5, 0.85, 1.14, 3.16, 1.63, 1.01,
-                               2.0, 2.16, 2.22, 1.69, 1.78, 1.19])
+# Max joint speed seen in the training data at 20 Hz, measured joints and commands (arm deg/s, hand rad/s)
+ARM_DATA_VMAX_DEG = np.array([90.9, 44.6, 74.1, 65.7, 139.8, 112.9, 54.0])
+HAND_DATA_VMAX_RAD = np.array([1.53, 2.23, 1.45, 1.72, 1.18, 1.29, 3.19, 2.59, 1.5, 0.89, 1.14, 3.16, 1.69, 1.02,
+                               2.09, 2.16, 2.22, 1.69, 1.83, 1.19])
 
 
 class Chunk:

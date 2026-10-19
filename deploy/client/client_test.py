@@ -11,6 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, "/wuji-vepfs/wuji-il/YuanZhen/data/_tools")
 
+from executor import ARM_DATA_VMAX_DEG  # noqa: E402
 from executor import Chunk  # noqa: E402
 from executor import ChunkExecutor  # noqa: E402
 from executor import HandVelocity  # noqa: E402
@@ -66,7 +67,7 @@ def test_safety_limits_position_and_speed():
     far = start.copy()
     far[0] += 50.0
     out = s.apply(far, now=0.01)
-    assert out[0] == pytest.approx(start[0] + 81.8 * 0.01)
+    assert out[0] == pytest.approx(start[0] + ARM_DATA_VMAX_DEG[0] * 0.01)
     beyond = start.copy()
     beyond[3] = 50.0  # inside the URDF limit (60) but far outside the data envelope (max -70 + 10)
     for k in range(1, 400):
