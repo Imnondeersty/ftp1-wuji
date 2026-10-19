@@ -95,6 +95,17 @@ def _action_joint_rep_uses_relative_supplementary(rep: str | None) -> bool:
     return normalized == "relative"
 
 
+def _action_source_key(data_key_set, key: str) -> str:
+    """Action targets come from `<key>_cmd` (e.g. teleop joint commands) when the zarr has it, else from `<key>`.
+
+    The state input and the base of relative actions always stay on `<key>` (measured), so actions become
+    command(t + k) - measured(t). For a position-controlled hand this keeps the grip offset that a finger blocked by
+    the object never reaches in its measured joints.
+    """
+    cmd_key = f"{key}_cmd"
+    return cmd_key if cmd_key in data_key_set else key
+
+
 def _should_compute_contact_for_non_tactile_dropout(non_tactile_dropout_ratio: float) -> bool:
     return float(non_tactile_dropout_ratio) > 0.0
 
@@ -839,6 +850,9 @@ class ZarrDataset(Dataset):
             keys = tuple(data.keys())
             self._cached_data_keys.append(keys)
             self._cached_data_key_sets.append(set(keys))
+        cmd_action_keys = sorted({k for keys in self._cached_data_keys for k in keys if k.endswith("_cmd")})
+        if cmd_action_keys:
+            logging.info(f"[MultiZarrDataset] action targets taken from {cmd_action_keys} where present")
 
         if data_config.create_train_val_split:
             assert data_config.use_val_dataset
@@ -1420,7 +1434,7 @@ class ZarrDataset(Dataset):
 
         # ================================ Get Wrist Action ================================
         if f"{hand_side}_wrist_pose" in data_key_set:
-            action_wrist_key = f"{hand_side}_wrist_pose"
+            action_wrist_key = _action_source_key(data_key_set, f"{hand_side}_wrist_pose")
             action_pose = data[action_wrist_key][action_idx_slice]  # (Ta, 6)
             # pose_to_mat returns a new array, no need for .copy()
             cam_action_pose_mat = cam_proj @ pose_to_mat(action_pose)
@@ -1435,7 +1449,7 @@ class ZarrDataset(Dataset):
             action_mask[:, :9] = 0
 
         if f"{hand_side}_arm_joints" in data_key_set:
-            action_arm_key = f"{hand_side}_arm_joints"
+            action_arm_key = _action_source_key(data_key_set, f"{hand_side}_arm_joints")
             action_arm_joints = data[action_arm_key][action_idx_slice]  # (Ta, N_joints)
             action_arm_joints = _replace_joint_glitches(action_arm_joints)
             joints_dim = action_arm_joints.shape[-1]
@@ -1455,7 +1469,7 @@ class ZarrDataset(Dataset):
             action_mask[:, 9 : 9 + FTP1_SINGLE_ARM_JOINT_DIM] = 0
 
         # ================================ Get Hand & Gripper Action ================================
-        action_hand_key = f"{hand_side}_hand_joints"
+        action_hand_key = _action_source_key(data_key_set, f"{hand_side}_hand_joints")
         hand_action_joints_raw = data[action_hand_key][action_idx_slice]  # (Ta, N_joints)
         hand_action_joints = hand_action_joints_raw.copy()
         if _action_joint_rep_uses_relative_hand(self.action_joint_rep):
